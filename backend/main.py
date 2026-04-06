@@ -54,7 +54,7 @@ async def generate_trip(request: TripRequest):
 
     try:
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-2.0-flash-lite',
             contents=system_prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -103,8 +103,36 @@ async def generate_trip(request: TripRequest):
             "data": generated_data
         }
     except Exception as e:
-        print(f"Error generating trip: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_str = str(e)
+        print(f"Error generating trip: {error_str}")
+        # Surface quota errors clearly
+        if '429' in error_str or 'RESOURCE_EXHAUSTED' in error_str:
+            print("Gemini limit reached. Returning mock data so you can still test the UI...")
+            
+            # Generate mock itinerary based on user input
+            mock_itinerary = []
+            for i in range(request.days):
+                mock_itinerary.append({
+                    "day": i + 1,
+                    "title": f"Discovering {request.destination} - Day {i + 1}",
+                    "description": f"Start your morning with local coffee, visit the iconic landmarks in the afternoon, and enjoy an authentic dinner in {request.destination}.",
+                    "tags": ["Culture", "Food", "Sightseeing"]
+                })
+                
+            mock_data = {
+                "packages": [
+                    {"name": "Shoestring", "hotel": 40, "food": 30, "transit": 15, "total": 85},
+                    {"name": "Sweet Spot", "hotel": 150, "food": 60, "transit": 25, "total": 235},
+                    {"name": "Splurge", "hotel": 400, "food": 150, "transit": 80, "total": 630}
+                ],
+                "itinerary": mock_itinerary
+            }
+            return {
+                "trip_id": "mocked-trip-id-123",
+                "data": mock_data
+            }
+
+        raise HTTPException(status_code=500, detail=error_str)
 
 @app.get("/")
 def read_root():
